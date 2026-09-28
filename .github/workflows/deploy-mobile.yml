@@ -10,26 +10,44 @@ permissions:
   pages: write
   id-token: write
 
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download mobile source
+        run: curl -fsSL "https://njylawxfbsogibdgczit.supabase.co/storage/v1/object/public/app/mobile-source.zip" -o mobile-source.zip
+      - name: Unpack mobile source
+        run: unzip -q mobile-source.zip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install app dependencies
+        working-directory: frontend
+        run: npm ci
+      - uses: actions/configure-pages@v5
+      - name: Build mobile app
+        working-directory: frontend
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist-app
+
   deploy:
+    needs: build
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
-      - name: Download app files
-        run: |
-          mkdir -p dist/assets dist/icons
-          BASE="https://njylawxfbsogibdgczit.supabase.co/storage/v1/object/public/app"
-          for f in index.html manifest.webmanifest sw.js favicon.svg icons.svg assets/index-8SrsHxEo.css assets/index-CF3YsIe2.js icons/icon-192.png icons/icon-512.png; do
-            curl -fsSL "$BASE/$f" -o "dist/$f"
-          done
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
       - id: deployment
         uses: actions/deploy-pages@v4
