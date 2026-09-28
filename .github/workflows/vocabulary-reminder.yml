@@ -1,0 +1,50 @@
+name: vocabulary-reminder
+
+on:
+  schedule:
+    - cron: "0 15 * * *"
+  workflow_dispatch:
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send reminder
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_USER_KEY: ${{ secrets.SUPABASE_USER_KEY }}
+          SMTP_HOST: smtp.163.com
+          SMTP_PORT: "465"
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_AUTH_CODE: ${{ secrets.SMTP_AUTH_CODE }}
+          REMINDER_TO: ${{ secrets.SMTP_USER }}
+          APP_URL: ${{ secrets.APP_URL }}
+        run: |
+          cat > reminder.py <<'PY'
+          import json, os, smtplib, ssl
+          from email.message import EmailMessage
+          from urllib import parse, request
+          SUPABASE_URL = os.environ["SUPABASE_URL"].rstrip("/")
+          SUPABASE_ANON_KEY = os.environ["SUPABASE_ANON_KEY"]
+          SUPABASE_USER_KEY = os.environ["SUPABASE_USER_KEY"]
+          SMTP_USER = os.environ["SMTP_USER"]
+          query = parse.urlencode({"user_key": f"eq.{SUPABASE_USER_KEY}", "select": "payload"})
+          req = request.Request(f"{SUPABASE_URL}/rest/v1/vocabulary_snapshots?{query}", headers={"apikey": SUPABASE_ANON_KEY, "Authorization": f"Bearer {SUPABASE_ANON_KEY}", "x-user-key": SUPABASE_USER_KEY})
+          with request.urlopen(req, timeout=60) as response:
+              rows = json.loads(response.read().decode("utf-8"))
+          if not rows:
+              raise RuntimeError("No vocabulary snapshot found")
+          words = rows[0].get("payload", {}).get("words", [])
+          counts = {"new": sum(1 for w in words if w.get("status") == "new"), "review": sum(1 for w in words if w.get("status") in {"learning", "review"}), "weak": sum(1 for w in words if int(w.get("mastery_level") or 0) < 60)}
+          msg = EmailMessage()
+          msg["Subject"] = "港硕教秘 · 今日单词复习"
+          msg["From"] = SMTP_USER
+          msg["To"] = os.environ.get("REMINDER_TO", SMTP_USER)
+          msg.set_content(f"今日新词：{counts['new']} 个\n待复习词：{counts['review']} 个\n薄弱词：{counts['weak']} 个\n\n开始复习：{os.environ.get('APP_URL','')}\n")
+          with smtplib.SMTP_SSL(os.environ.get("SMTP_HOST", "smtp.163.com"), int(os.environ.get("SMTP_PORT", "465")), context=ssl.create_default_context(), timeout=30) as server:
+              server.login(SMTP_USER, os.environ["SMTP_AUTH_CODE"])
+              server.send_message(msg)
+          print("reminder sent", counts)
+          PY
+          python reminder.py
