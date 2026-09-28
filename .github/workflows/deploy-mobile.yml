@@ -1,0 +1,33 @@
+name: deploy-mobile
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: Download app files
+        run: |
+          mkdir -p dist/assets dist/icons
+          BASE="https://njylawxfbsogibdgczit.supabase.co/storage/v1/object/public/app"
+          for f in index.html manifest.webmanifest sw.js favicon.svg icons.svg assets/index-8SrsHxEo.css assets/index-CF3YsIe2.js icons/icon-192.png icons/icon-512.png; do
+            curl -fsSL "$BASE/$f" -o "dist/$f"
+          done
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
