@@ -19,7 +19,7 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_AUTH_CODE: ${{ secrets.SMTP_AUTH_CODE }}
           REMINDER_TO: ${{ secrets.SMTP_USER }}
-          APP_URL: ${{ secrets.APP_URL }}
+          APP_URL: https://yoyo-yy520.github.io/hk-study-agent/#/review?key=${{ secrets.SUPABASE_USER_KEY }}
         run: |
           cat > reminder.py <<'PY'
           import json, os, smtplib, ssl
